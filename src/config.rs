@@ -126,7 +126,7 @@ impl Config {
 
     /// Generate a default configuration for a Claude-enabled project.
     fn claude_default() -> Self {
-        println!("Found CLAUDE.md, setting up for Claude CLI...");
+        println!("Found CLAUDE.md, setting up for Claude Code...");
         Config {
             main_branch: None,
             worktree_dir: None,

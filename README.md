@@ -147,6 +147,7 @@ alias wm='workmux'
 - [`init`](#workmux-init) - Generate configuration file
 - [`open`](#workmux-open-branch-name) - Open a tmux window for an existing
   worktree
+- [`claude prune`](#workmux-claude-prune) - Clean up stale Claude Code entries
 - [`completions`](#workmux-completions-shell) - Generate shell completions
 
 ### `workmux add <branch-name>`
@@ -358,6 +359,44 @@ workmux open user-auth --run-hooks
 
 # Open and restore configuration files
 workmux open user-auth --force-files
+```
+
+---
+
+### `workmux claude prune`
+
+Removes stale entries from `~/.claude.json` that point to deleted worktree
+directories. When you run Claude Code in worktrees, it stores configuration in
+`~/.claude.json`. Over time, as worktrees are merged or removed, this file can
+accumulate entries for paths that no longer exist.
+
+**What happens:**
+
+1. Scans `~/.claude.json` for entries pointing to non-existent directories
+2. Creates a backup at `~/.claude.json.bak` before making changes
+3. Removes all stale entries
+4. Reports the number of entries cleaned up
+
+**Safety:**
+
+- Only removes entries for absolute paths that don't exist
+- Creates a backup before modifying the file
+- Preserves all valid entries and relative paths
+
+**Examples:**
+
+```bash
+# Clean up stale Claude Code entries
+workmux claude prune
+```
+
+**Example output:**
+
+```
+  - Removing: /Users/user/project__worktrees/old-feature
+
+✓ Created backup at ~/.claude.json.bak
+✓ Removed 3 stale entries from ~/.claude.json
 ```
 
 ---

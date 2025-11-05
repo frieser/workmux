@@ -1,3 +1,4 @@
+mod claude;
 mod cli;
 mod cmd;
 mod config;

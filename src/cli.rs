@@ -1,4 +1,4 @@
-use crate::{config, git, workflow};
+use crate::{claude, config, git, workflow};
 use anyhow::{anyhow, Context, Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
@@ -157,6 +157,12 @@ enum Commands {
     /// Generate example .workmux.yaml configuration file
     Init,
 
+    /// Claude Code integration commands
+    Claude {
+        #[command(subcommand)]
+        command: ClaudeCommands,
+    },
+
     /// Generate shell completions
     Completions {
         /// The shell to generate completions for
@@ -165,6 +171,13 @@ enum Commands {
     },
 }
 
+#[derive(Subcommand)]
+enum ClaudeCommands {
+    /// Remove stale entries from ~/.claude.json for deleted worktrees
+    Prune,
+}
+
+// --- Public Entry Point ---
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
@@ -193,6 +206,9 @@ pub fn run() -> Result<()> {
         }
         Commands::List | Commands::Ls => list_worktrees(),
         Commands::Init => config::Config::init(),
+        Commands::Claude { command } => match command {
+            ClaudeCommands::Prune => prune_claude_config(),
+        },
         Commands::Completions { shell } => {
             let mut cmd = Cli::command();
             let name = cmd.get_name().to_string();
@@ -452,5 +468,10 @@ fn list_worktrees() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+fn prune_claude_config() -> Result<()> {
+    claude::prune_stale_entries().context("Failed to prune Claude configuration")?;
     Ok(())
 }

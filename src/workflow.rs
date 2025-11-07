@@ -39,7 +39,11 @@ struct SetupOptions {
 }
 
 /// Create a new worktree with tmux window and panes
-pub fn create(branch_name: &str, config: &config::Config) -> Result<CreateResult> {
+pub fn create(
+    branch_name: &str,
+    base_branch: Option<&str>,
+    config: &config::Config,
+) -> Result<CreateResult> {
     // Pre-flight checks
     if !git::is_git_repo()? {
         return Err(anyhow!("Not in a git repository"));
@@ -71,17 +75,23 @@ pub fn create(branch_name: &str, config: &config::Config) -> Result<CreateResult
     let branch_exists = git::branch_exists(branch_name)?;
     let create_new = !branch_exists;
 
-    // Determine the base for the new branch to ensure consistency with unmerged checks
+    // Determine the base for the new branch
     let base_branch_for_creation = if create_new {
-        let main_branch = config
-            .main_branch
-            .as_ref()
-            .map(|s| Ok(s.clone()))
-            .unwrap_or_else(git::get_default_branch)
-            .context("Failed to determine the main branch. Specify it in .workmux.yaml")?;
+        if let Some(base) = base_branch {
+            // Use the explicitly provided base branch/commit/tag
+            Some(base.to_string())
+        } else {
+            // Auto-detect the base branch using the main branch
+            let main_branch = config
+                .main_branch
+                .as_ref()
+                .map(|s| Ok(s.clone()))
+                .unwrap_or_else(git::get_default_branch)
+                .context("Failed to determine the main branch. Specify it in .workmux.yaml")?;
 
-        let base = git::get_merge_base(&main_branch)?;
-        Some(base)
+            let base = git::get_merge_base(&main_branch)?;
+            Some(base)
+        }
     } else {
         None
     };

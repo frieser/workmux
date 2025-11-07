@@ -100,6 +100,10 @@ enum Commands {
     Add {
         /// Name of the branch (creates if it doesn't exist)
         branch_name: String,
+
+        /// Base branch/commit/tag to branch from
+        #[arg(long)]
+        from: Option<String>,
     },
 
     /// Open a tmux window for an existing worktree
@@ -182,7 +186,7 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Add { branch_name } => create_worktree(&branch_name),
+        Commands::Add { branch_name, from } => create_worktree(&branch_name, from.as_deref()),
         Commands::Open {
             branch_name,
             run_hooks,
@@ -218,7 +222,7 @@ pub fn run() -> Result<()> {
     }
 }
 
-fn create_worktree(branch_name: &str) -> Result<()> {
+fn create_worktree(branch_name: &str, base_branch: Option<&str>) -> Result<()> {
     let config = config::Config::load()?;
 
     // Print setup status if there are post-create hooks
@@ -226,8 +230,8 @@ fn create_worktree(branch_name: &str) -> Result<()> {
         println!("Running setup commands...");
     }
 
-    let result =
-        workflow::create(branch_name, &config).context("Failed to create worktree environment")?;
+    let result = workflow::create(branch_name, base_branch, &config)
+        .context("Failed to create worktree environment")?;
 
     if result.post_create_hooks_run > 0 {
         println!("✓ Setup complete");

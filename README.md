@@ -40,11 +40,12 @@ cargo install workmux
 1. **Initialize configuration (optional)**:
 
 ```bash
-workmux init  # Creates .workmux.yaml
+workmux init
 ```
 
-Customize your workflow (panes, hooks, files). Works with defaults if skipped.
-For global settings, create `~/.config/workmux/config.yaml`.
+This creates a `.workmux.yaml` file to customize your workflow (pane layouts,
+setup commands, file operations, etc.). workmux works out of the box with
+sensible defaults, so this step is optional.
 
 2. **Create a new worktree and tmux window**:
 

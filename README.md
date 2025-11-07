@@ -74,10 +74,14 @@ and local branch).
 
 workmux uses a two-level configuration system:
 
-- **Global** (`~/.config/workmux/config.yaml`): Personal defaults for all projects
+- **Global** (`~/.config/workmux/config.yaml`): Personal defaults for all
+  projects
 - **Project** (`.workmux.yaml`): Project-specific overrides
 
-Project settings override global settings. For `post_create` and file operation lists (`files.copy`, `files.symlink`), you can use `"<global>"` to include global values alongside project-specific ones. Other settings like `panes` are replaced entirely when defined in the project config.
+Project settings override global settings. For `post_create` and file operation
+lists (`files.copy`, `files.symlink`), you can use `"<global>"` to include
+global values alongside project-specific ones. Other settings like `panes` are
+replaced entirely when defined in the project config.
 
 ### Global configuration example
 
@@ -133,8 +137,8 @@ panes:
 
 **Default behavior:**
 
-- Worktrees are created in `<project>__worktrees` as a sibling directory to
-  your project by default
+- Worktrees are created in `<project>__worktrees` as a sibling directory to your
+  project by default
 - If no `panes` configuration is defined, workmux provides sensible defaults:
   - For projects with a `CLAUDE.md` file: Opens `claude` in the first pane
   - For all other projects: Opens your default shell (`$SHELL`)
@@ -215,8 +219,8 @@ the merge behavior with these mutually exclusive flags:
 - `--rebase`: Rebase the feature branch onto main before merging (creates a
   linear history via fast-forward merge). If conflicts occur, you'll need to
   resolve them manually in the worktree and run `git rebase --continue`.
-- `--squash`: Squash all commits from the feature branch into a single commit
-  on main. You'll be prompted to provide a commit message in your editor.
+- `--squash`: Squash all commits from the feature branch into a single commit on
+  main. You'll be prompted to provide a commit message in your editor.
 
 **What happens:**
 
@@ -321,8 +325,8 @@ bug-fix     ✓       ●           ~/project__worktrees/bug-fix
 
 ### `workmux init`
 
-Generates `.workmux.yaml` with example configuration and `"<global>"` placeholder
-usage.
+Generates `.workmux.yaml` with example configuration and `"<global>"`
+placeholder usage.
 
 **Examples:**
 
@@ -536,6 +540,13 @@ workmux completions fish | source
 - Rust (for building)
 - Git 2.5+ (for worktree support)
 - tmux
+
+## Inspiration
+
+workmux is inspired by [wtp](https://github.com/satococoa/wtp), an excellent git
+worktree management tool. While wtp streamlines worktree creation and setup,
+workmux takes this further by tightly coupling worktrees with tmux window
+management.
 
 ## Related projects
 

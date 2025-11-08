@@ -106,14 +106,15 @@ impl Config {
 
     /// Load the global configuration file from the XDG config directory.
     fn load_global() -> anyhow::Result<Option<Self>> {
-        if let Some(config_dir) = dirs::config_dir() {
-            let config_path = config_dir.join("workmux/config.yaml");
-            if config_path.exists() {
-                return Self::load_from_path(&config_path);
+        // Check ~/.config/workmux (XDG convention, works cross-platform)
+        if let Some(home_dir) = home::home_dir() {
+            let xdg_config_path = home_dir.join(".config/workmux/config.yaml");
+            if xdg_config_path.exists() {
+                return Self::load_from_path(&xdg_config_path);
             }
-            let config_path_yml = config_dir.join("workmux/config.yml");
-            if config_path_yml.exists() {
-                return Self::load_from_path(&config_path_yml);
+            let xdg_config_path_yml = home_dir.join(".config/workmux/config.yml");
+            if xdg_config_path_yml.exists() {
+                return Self::load_from_path(&xdg_config_path_yml);
             }
         }
         Ok(None)

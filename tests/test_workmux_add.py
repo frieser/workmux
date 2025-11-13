@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from .conftest import TmuxEnvironment, poll_until, setup_git_repo
@@ -139,4 +140,76 @@ panes:
 
     assert poll_until(check_pane_output, timeout=2.0), (
         f"Expected output '{expected_output}' not found in pane"
+    )
+
+
+def test_add_sources_shell_rc_files(
+    isolated_tmux_server: TmuxEnvironment, workmux_exe_path: Path
+):
+    """Verifies that shell rc files (.zshrc) are sourced and aliases work in pane commands."""
+    env = isolated_tmux_server
+    repo_path = env.tmp_path
+    branch_name = "feature-aliases"
+    window_name = f"wm-{branch_name}"
+    alias_output = "custom_alias_worked_correctly"
+
+    # Create a custom HOME directory with a .zshrc that defines an alias
+    test_home = env.tmp_path / "test_home"
+    test_home.mkdir()
+    zshrc_content = f"""
+# Test alias
+alias testcmd='echo "{alias_output}"'
+"""
+    (test_home / ".zshrc").write_text(zshrc_content)
+
+    setup_git_repo(repo_path)
+    config_content = """
+panes:
+  - command: "testcmd; sleep 0.5"
+"""
+    (repo_path / ".workmux.yaml").write_text(config_content)
+
+    # Set HOME in the tmux session environment so panes inherit it
+    env.tmux(["setenv", "HOME", str(test_home)])
+
+    # Set SHELL to ensure we're using zsh
+    shell_path = os.environ.get("SHELL", "/bin/zsh")
+    env.tmux(["setenv", "SHELL", shell_path])
+
+    # Now run workmux add normally
+    stdout_file = env.tmp_path / "workmux_stdout.txt"
+    stderr_file = env.tmp_path / "workmux_stderr.txt"
+    exit_code_file = env.tmp_path / "workmux_exit_code.txt"
+
+    # Clean up any previous files
+    for f in [stdout_file, stderr_file, exit_code_file]:
+        if f.exists():
+            f.unlink()
+
+    workmux_cmd = (
+        f"cd {repo_path} && "
+        f"{workmux_exe_path} add {branch_name} "
+        f"> {stdout_file} 2> {stderr_file}; "
+        f"echo $? > {exit_code_file}"
+    )
+
+    env.tmux(["send-keys", "-t", "test:", workmux_cmd, "C-m"])
+
+    # Wait for command to complete
+    assert poll_until(exit_code_file.exists, timeout=5.0), (
+        "workmux command did not complete in time"
+    )
+
+    exit_code = int(exit_code_file.read_text().strip())
+    if exit_code != 0:
+        stderr = stderr_file.read_text() if stderr_file.exists() else ""
+        raise AssertionError(f"workmux add failed with exit code {exit_code}\n{stderr}")
+
+    # Verify the alias output appears in the pane
+    def check_alias_output():
+        capture_result = env.tmux(["capture-pane", "-p", "-t", window_name])
+        return alias_output in capture_result.stdout
+
+    assert poll_until(check_alias_output, timeout=2.0), (
+        f"Alias output '{alias_output}' not found in pane - shell rc file not sourced"
     )

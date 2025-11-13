@@ -3,10 +3,12 @@ from pathlib import Path
 
 from .conftest import (
     TmuxEnvironment,
+    create_commit,
     get_window_name,
     get_worktree_path,
     poll_until,
     run_workmux_add,
+    run_workmux_command,
     write_workmux_config,
 )
 
@@ -130,3 +132,43 @@ alias testcmd='echo "{alias_output}"'
     assert poll_until(check_alias_output, timeout=2.0), (
         f"Alias output '{alias_output}' not found in pane - shell rc file not sourced"
     )
+
+
+def test_add_from_specific_branch(
+    isolated_tmux_server: TmuxEnvironment, workmux_exe_path: Path, repo_path: Path
+):
+    """Verifies that `workmux add --from` creates a worktree from a specific branch."""
+    env = isolated_tmux_server
+    new_branch = "feature-from-base"
+
+    write_workmux_config(repo_path)
+
+    # Create a commit on the current branch
+    create_commit(env, repo_path, "Add base file")
+
+    # Get current branch name
+    result = env.run_command(["git", "branch", "--show-current"], cwd=repo_path)
+    base_branch = result.stdout.strip()
+
+    # Run workmux add with --from flag
+    run_workmux_command(
+        env,
+        workmux_exe_path,
+        repo_path,
+        f"add {new_branch} --from {base_branch}",
+    )
+
+    # Verify worktree was created
+    expected_worktree_dir = get_worktree_path(repo_path, new_branch)
+    assert expected_worktree_dir.is_dir()
+
+    # Verify the new branch contains the file from base branch
+    # The create_commit helper creates a file with a specific naming pattern
+    expected_file = expected_worktree_dir / "file_for_Add_base_file.txt"
+    assert expected_file.exists()
+
+    # Verify tmux window was created
+    window_name = get_window_name(new_branch)
+    list_windows_result = env.tmux(["list-windows", "-F", "#{window_name}"])
+    existing_windows = list_windows_result.stdout.strip().split("\n")
+    assert window_name in existing_windows

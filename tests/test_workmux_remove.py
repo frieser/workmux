@@ -209,3 +209,37 @@ def test_remove_force_from_within_worktree_window_without_branch_arg(
     assert window_name not in list_windows_result.stdout, "Window should be closed"
     branch_list_result = env.run_command(["git", "branch", "--list", branch_name])
     assert branch_name not in branch_list_result.stdout, "Branch should be removed"
+
+
+def test_remove_with_keep_branch_flag(
+    isolated_tmux_server: TmuxEnvironment, workmux_exe_path: Path, repo_path: Path
+):
+    """Verifies `workmux remove --keep-branch` removes worktree and window but keeps the branch."""
+    env = isolated_tmux_server
+    branch_name = "keep-branch-test"
+    window_name = get_window_name(branch_name)
+    write_workmux_config(repo_path)
+    run_workmux_add(env, workmux_exe_path, repo_path, branch_name)
+
+    worktree_path = get_worktree_path(repo_path, branch_name)
+    create_commit(env, worktree_path, "feat: work to keep")
+
+    # Run remove with --keep-branch flag
+    run_workmux_remove(
+        env,
+        workmux_exe_path,
+        repo_path,
+        branch_name,
+        keep_branch=True,
+    )
+
+    # Verify worktree is removed
+    assert not worktree_path.exists(), "Worktree should be removed"
+
+    # Verify tmux window is removed
+    list_windows_result = env.tmux(["list-windows", "-F", "#{window_name}"])
+    assert window_name not in list_windows_result.stdout, "Window should be closed"
+
+    # Verify branch still exists
+    branch_list_result = env.run_command(["git", "branch", "--list", branch_name])
+    assert branch_name in branch_list_result.stdout, "Branch should still exist"

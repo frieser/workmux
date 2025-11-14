@@ -84,6 +84,10 @@ struct RemoveArgs {
     /// Also delete the remote branch
     #[arg(short = 'r', long)]
     delete_remote: bool,
+
+    /// Keep the local branch (only remove worktree and tmux window)
+    #[arg(short = 'k', long, conflicts_with = "delete_remote")]
+    keep_branch: bool,
 }
 
 #[derive(Parser)]
@@ -248,9 +252,12 @@ pub fn run() -> Result<()> {
             rebase,
             squash,
         ),
-        Commands::Remove(args) => {
-            remove_worktree(args.branch_name.as_deref(), args.force, args.delete_remote)
-        }
+        Commands::Remove(args) => remove_worktree(
+            args.branch_name.as_deref(),
+            args.force,
+            args.delete_remote,
+            args.keep_branch,
+        ),
         Commands::List => list_worktrees(),
         Commands::Init => config::Config::init(),
         Commands::Claude { command } => match command {
@@ -383,7 +390,12 @@ fn merge_worktree(
     Ok(())
 }
 
-fn remove_worktree(branch_name: Option<&str>, mut force: bool, delete_remote: bool) -> Result<()> {
+fn remove_worktree(
+    branch_name: Option<&str>,
+    mut force: bool,
+    delete_remote: bool,
+    keep_branch: bool,
+) -> Result<()> {
     // Determine the branch to remove (must be done BEFORE changing CWD)
     let branch_to_remove = if let Some(name) = branch_name {
         name.to_string()
@@ -419,41 +431,43 @@ fn remove_worktree(branch_name: Option<&str>, mut force: bool, delete_remote: bo
             ));
         }
 
-        // Check if we need to prompt for unmerged commits
-        let main_branch = git::get_default_branch()?;
-        let base_branch = git::get_merge_base(&main_branch)?;
-        let unmerged_branches = git::get_unmerged_branches(&base_branch)?;
-        let has_unmerged = unmerged_branches.contains(&branch_to_remove);
+        // Check if we need to prompt for unmerged commits (only relevant when deleting the branch)
+        if !keep_branch {
+            let main_branch = git::get_default_branch()?;
+            let base_branch = git::get_merge_base(&main_branch)?;
+            let unmerged_branches = git::get_unmerged_branches(&base_branch)?;
+            let has_unmerged = unmerged_branches.contains(&branch_to_remove);
 
-        if has_unmerged {
-            println!(
-                "This will delete the worktree, tmux window, and local branch for '{}'.",
-                branch_to_remove
-            );
-            if delete_remote {
-                println!("The remote branch will also be deleted.");
+            if has_unmerged {
+                println!(
+                    "This will delete the worktree, tmux window, and local branch for '{}'.",
+                    branch_to_remove
+                );
+                if delete_remote {
+                    println!("The remote branch will also be deleted.");
+                }
+                println!(
+                    "Warning: Branch '{}' has commits that are not merged into '{}'.",
+                    branch_to_remove, base_branch
+                );
+                println!("This action cannot be undone.");
+                print!("Are you sure you want to continue? [y/N] ");
+
+                // Flush stdout to ensure the prompt is displayed before reading input
+                io::stdout().flush()?;
+
+                let mut confirmation = String::new();
+                io::stdin().read_line(&mut confirmation)?;
+
+                if confirmation.trim().to_lowercase() != "y" {
+                    println!("Aborted.");
+                    return Ok(());
+                }
+
+                // User confirmed deletion of unmerged branch - treat as force for git operations
+                // This is safe because we already verified there are no uncommitted changes above
+                force = true;
             }
-            println!(
-                "Warning: Branch '{}' has commits that are not merged into '{}'.",
-                branch_to_remove, base_branch
-            );
-            println!("This action cannot be undone.");
-            print!("Are you sure you want to continue? [y/N] ");
-
-            // Flush stdout to ensure the prompt is displayed before reading input
-            io::stdout().flush()?;
-
-            let mut confirmation = String::new();
-            io::stdin().read_line(&mut confirmation)?;
-
-            if confirmation.trim().to_lowercase() != "y" {
-                println!("Aborted.");
-                return Ok(());
-            }
-
-            // User confirmed deletion of unmerged branch - treat as force for git operations
-            // This is safe because we already verified there are no uncommitted changes above
-            force = true;
         }
     }
 
@@ -464,13 +478,26 @@ fn remove_worktree(branch_name: Option<&str>, mut force: bool, delete_remote: bo
         println!("Running pre-delete commands...");
     }
 
-    let result = workflow::remove(&branch_to_remove, force, delete_remote, &config)
-        .context("Failed to remove worktree")?;
+    let result = workflow::remove(
+        &branch_to_remove,
+        force,
+        delete_remote,
+        keep_branch,
+        &config,
+    )
+    .context("Failed to remove worktree")?;
 
-    println!(
-        "✓ Successfully removed worktree and branch '{}'",
-        result.branch_removed
-    );
+    if keep_branch {
+        println!(
+            "✓ Successfully removed worktree for branch '{}'. The local branch was kept.",
+            result.branch_removed
+        );
+    } else {
+        println!(
+            "✓ Successfully removed worktree and branch '{}'",
+            result.branch_removed
+        );
+    }
 
     Ok(())
 }

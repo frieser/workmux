@@ -439,6 +439,7 @@ def run_workmux_remove(
     repo_path: Path,
     branch_name: Optional[str] = None,
     force: bool = False,
+    keep_branch: bool = False,
     user_input: Optional[str] = None,
     expect_fail: bool = False,
     from_window: Optional[str] = None,
@@ -455,6 +456,7 @@ def run_workmux_remove(
         repo_path: Path to the git repository
         branch_name: Optional name of the branch/worktree to remove (omit to auto-detect from current branch)
         force: Whether to use -f flag to skip confirmation
+        keep_branch: Whether to use --keep-branch flag to keep the local branch
         user_input: Optional string to pipe to stdin (e.g., 'y' for confirmation)
         expect_fail: If True, asserts the command fails (non-zero exit code)
         from_window: Optional tmux window name to run the command from (useful for testing remove from within worktree window)
@@ -469,6 +471,7 @@ def run_workmux_remove(
             f.unlink()
 
     force_flag = "-f " if force else ""
+    keep_branch_flag = "--keep-branch " if keep_branch else ""
     branch_arg = branch_name if branch_name else ""
     input_cmd = f"echo '{user_input}' | " if user_input else ""
 
@@ -478,7 +481,7 @@ def run_workmux_remove(
         remove_script = (
             f"cd {worktree_path} && "
             f"{input_cmd}"
-            f"{workmux_exe_path} remove {force_flag}{branch_arg} "
+            f"{workmux_exe_path} remove {force_flag}{keep_branch_flag}{branch_arg} "
             f"> {stdout_file} 2> {stderr_file}; "
             f"echo $? > {exit_code_file}"
         )
@@ -486,7 +489,7 @@ def run_workmux_remove(
         remove_script = (
             f"cd {repo_path} && "
             f"{input_cmd}"
-            f"{workmux_exe_path} remove {force_flag}{branch_arg} "
+            f"{workmux_exe_path} remove {force_flag}{keep_branch_flag}{branch_arg} "
             f"> {stdout_file} 2> {stderr_file}; "
             f"echo $? > {exit_code_file}"
         )

@@ -339,8 +339,8 @@ workmux merge user-auth --delete-remote
 
 ### `workmux remove <branch-name>` (alias: `rm`)
 
-Removes a worktree, tmux window, and branch without merging. Useful for
-abandoning work or cleaning up experimental branches.
+Removes a worktree, tmux window, and branch without merging (unless you keep
+the branch). Useful for abandoning work or cleaning up experimental branches.
 
 - `<branch-name>`: Name of the branch to remove.
 
@@ -348,6 +348,8 @@ abandoning work or cleaning up experimental branches.
 
 - `--force`, `-f`: Skip confirmation prompt and ignore uncommitted changes
 - `--delete-remote`, `-r`: Also delete the remote branch
+- `--keep-branch`, `-k`: Remove only the worktree and tmux window while keeping
+  the local branch (incompatible with `--delete-remote`)
 
 **Examples:**
 
@@ -357,6 +359,9 @@ workmux remove experiment
 
 # Use the alias
 workmux rm old-work
+
+# Remove worktree/window but keep the branch
+workmux remove --keep-branch experiment
 
 # Force remove without prompts
 workmux rm -f experiment

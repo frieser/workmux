@@ -673,6 +673,7 @@ pub fn merge(
         &worktree_path,
         true,
         delete_remote,
+        false, // keep_branch: always delete when merging
         config,
     )?;
 
@@ -695,9 +696,13 @@ pub fn remove(
     branch_name: &str,
     force: bool,
     delete_remote: bool,
+    keep_branch: bool,
     config: &config::Config,
 ) -> Result<RemoveResult> {
-    info!(branch = branch_name, force, delete_remote, "remove:start");
+    info!(
+        branch = branch_name,
+        force, delete_remote, keep_branch, "remove:start"
+    );
     if !git::is_git_repo()? {
         return Err(anyhow!("Not in a git repository"));
     }
@@ -762,13 +767,17 @@ pub fn remove(
     // Note: Unmerged branch check removed - git branch -d/D handles this natively
     // The CLI provides a user-friendly confirmation prompt before calling this function
     let prefix = config.window_prefix();
-    info!(branch = branch_name, delete_remote, "remove:cleanup start");
+    info!(
+        branch = branch_name,
+        delete_remote, keep_branch, "remove:cleanup start"
+    );
     let cleanup_result = cleanup(
         prefix,
         branch_name,
         &worktree_path,
         force,
         delete_remote,
+        keep_branch,
         config,
     )?;
 
@@ -791,6 +800,7 @@ pub fn cleanup(
     worktree_path: &Path,
     force: bool,
     delete_remote: bool,
+    keep_branch: bool,
     config: &config::Config,
 ) -> Result<CleanupResult> {
     info!(
@@ -798,6 +808,7 @@ pub fn cleanup(
         path = %worktree_path.display(),
         force,
         delete_remote,
+        keep_branch,
         "cleanup:start"
     );
     // Change the CWD to main worktree before any destructive operations.
@@ -867,13 +878,15 @@ pub fn cleanup(
         git::prune_worktrees().context("Failed to prune worktrees")?;
         debug!("cleanup:git worktrees pruned");
 
-        // 3. Delete the local branch.
-        git::delete_branch(branch_name, force).context("Failed to delete local branch")?;
-        result.local_branch_deleted = true;
-        info!(branch = branch_name, "cleanup:local branch deleted");
+        // 3. Delete the local branch (unless keeping it).
+        if !keep_branch {
+            git::delete_branch(branch_name, force).context("Failed to delete local branch")?;
+            result.local_branch_deleted = true;
+            info!(branch = branch_name, "cleanup:local branch deleted");
+        }
 
-        // 4. Delete the remote branch if requested.
-        if delete_remote {
+        // 4. Delete the remote branch if requested (redundant check due to CLI conflict, but safe).
+        if delete_remote && !keep_branch {
             match git::delete_remote_branch(branch_name) {
                 Ok(_) => {
                     result.remote_branch_deleted = true;

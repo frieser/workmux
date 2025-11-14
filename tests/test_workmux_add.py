@@ -555,7 +555,7 @@ def test_add_from_remote_branch(
         env,
         workmux_exe_path,
         repo_path,
-        f"add --remote {remote_ref}",
+        f"add {remote_ref}",
     )
 
     worktree_path = get_worktree_path(repo_path, remote_branch_path)
@@ -574,72 +574,6 @@ def test_add_from_remote_branch(
 
     upstream_tip = env.run_command(
         ["git", "rev-parse", f"{remote_branch_path}@{{upstream}}"], cwd=repo_path
-    ).stdout.strip()
-    assert upstream_tip == remote_tip
-
-    origin_tip = env.run_command(
-        ["git", "rev-parse", remote_ref], cwd=repo_path
-    ).stdout.strip()
-    assert origin_tip == remote_tip
-
-
-def test_add_from_remote_branch_with_custom_name(
-    isolated_tmux_server: TmuxEnvironment,
-    workmux_exe_path: Path,
-    repo_path: Path,
-    remote_repo_path: Path,
-):
-    """`workmux add foo --remote origin/bar` should keep foo as the local branch name."""
-    env = isolated_tmux_server
-    remote_branch_path = "feature/custom-remote"
-    remote_ref = f"origin/{remote_branch_path}"
-    local_branch = "custom-local-name"
-    commit_message = "Remote PR custom work"
-
-    write_workmux_config(repo_path)
-
-    env.run_command(
-        ["git", "remote", "add", "origin", str(remote_repo_path)], cwd=repo_path
-    )
-    env.run_command(["git", "push", "-u", "origin", "main"], cwd=repo_path)
-
-    env.run_command(["git", "checkout", "-b", remote_branch_path], cwd=repo_path)
-    create_commit(env, repo_path, commit_message)
-    remote_tip = env.run_command(
-        ["git", "rev-parse", remote_branch_path], cwd=repo_path
-    ).stdout.strip()
-    env.run_command(["git", "push", "-u", "origin", remote_branch_path], cwd=repo_path)
-
-    env.run_command(["git", "checkout", "main"], cwd=repo_path)
-    env.run_command(["git", "branch", "-D", remote_branch_path], cwd=repo_path)
-    env.run_command(
-        ["git", "update-ref", "-d", f"refs/remotes/{remote_ref}"],
-        cwd=repo_path,
-    )
-
-    run_workmux_command(
-        env,
-        workmux_exe_path,
-        repo_path,
-        f"add {local_branch} --remote {remote_ref}",
-    )
-
-    worktree_path = get_worktree_path(repo_path, local_branch)
-    expected_file = (
-        worktree_path
-        / f"file_for_{commit_message.replace(' ', '_').replace(':', '')}.txt"
-    )
-    assert expected_file.exists()
-    assert expected_file.read_text() == f"content for {commit_message}"
-
-    # Verify the local branch and upstream tracking.
-    branch_tip = env.run_command(
-        ["git", "rev-parse", local_branch], cwd=repo_path
-    ).stdout.strip()
-    assert branch_tip == remote_tip
-
-    upstream_tip = env.run_command(
-        ["git", "rev-parse", f"{local_branch}@{{upstream}}"], cwd=repo_path
     ).stdout.strip()
     assert upstream_tip == remote_tip
 

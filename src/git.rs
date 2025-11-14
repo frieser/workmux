@@ -86,8 +86,8 @@ pub fn branch_exists(branch_name: &str) -> Result<bool> {
 /// Parse a remote branch specification in the form "<remote>/<branch>"
 pub fn parse_remote_branch_spec(spec: &str) -> Result<RemoteBranchSpec> {
     let mut parts = spec.splitn(2, '/');
-    let remote = parts.next().unwrap_or("").trim();
-    let branch = parts.next().unwrap_or("").trim();
+    let remote = parts.next().unwrap_or("");
+    let branch = parts.next().unwrap_or("");
 
     if remote.is_empty() || branch.is_empty() {
         return Err(anyhow!(

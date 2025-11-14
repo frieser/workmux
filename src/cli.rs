@@ -99,9 +99,8 @@ struct Cli {
 enum Commands {
     /// Create a new worktree and tmux window
     Add {
-        /// Name of the branch (creates if it doesn't exist)
-        #[arg(required_unless_present = "remote_branch")]
-        branch_name: Option<String>,
+        /// Name of the branch (creates if it doesn't exist) or remote ref (e.g., origin/feature)
+        branch_name: String,
 
         /// Base branch/commit/tag to branch from
         #[arg(long)]
@@ -110,12 +109,6 @@ enum Commands {
         /// Use the current branch as the base (shorthand for --base <current-branch>)
         #[arg(short = 'c', long = "from-current", conflicts_with = "base")]
         from_current: bool,
-        /// Fetch and branch from a remote branch (e.g., origin/feature/foo)
-        #[arg(
-            long = "remote",
-            conflicts_with_all = ["base", "from_current"]
-        )]
-        remote_branch: Option<String>,
     },
 
     /// Open a tmux window for an existing worktree
@@ -196,32 +189,46 @@ pub fn run() -> Result<()> {
             branch_name,
             base,
             from_current,
-            remote_branch,
         } => {
-            let branch_name = match branch_name {
-                Some(name) => name,
-                None => {
-                    let spec = remote_branch
-                        .as_ref()
-                        .expect("clap requires --remote when branch_name is omitted");
-                    git::parse_remote_branch_spec(spec)
-                        .context("Invalid --remote format. Use <remote>/<branch>")?
-                        .branch
+            // Check if branch_name is a remote ref (e.g., origin/feature/foo)
+            let remotes = git::list_remotes().context("Failed to list git remotes")?;
+            let detected_remote = remotes
+                .iter()
+                .find(|r| branch_name.starts_with(&format!("{}/", r)));
+
+            if let Some(remote_name) = detected_remote {
+                // Auto-detected remote ref
+                if base.is_some() || from_current {
+                    return Err(anyhow!(
+                        "Cannot use --base or --from-current with a remote branch reference. \
+                        The remote branch '{}' will be used as the base.",
+                        branch_name
+                    ));
                 }
-            };
-            let resolved_base = if from_current {
-                Some(
-                    git::get_current_branch()
-                        .context("Failed to determine the current branch for --from-current")?,
-                )
+
+                // Parse the remote ref
+                let spec = git::parse_remote_branch_spec(&branch_name)
+                    .context("Invalid remote branch format. Use <remote>/<branch>")?;
+
+                if spec.remote != *remote_name {
+                    return Err(anyhow!("Mismatched remote detection"));
+                }
+
+                // Create worktree with local branch name derived from remote ref
+                // Pass the full remote ref as the remote_branch parameter
+                create_worktree(&spec.branch, None, Some(&branch_name))
             } else {
-                base
-            };
-            create_worktree(
-                &branch_name,
-                resolved_base.as_deref(),
-                remote_branch.as_deref(),
-            )
+                // Regular local branch
+                let resolved_base = if from_current {
+                    Some(
+                        git::get_current_branch()
+                            .context("Failed to determine the current branch for --from-current")?,
+                    )
+                } else {
+                    base
+                };
+                create_worktree(&branch_name, resolved_base.as_deref(), None)
+            }
         }
         Commands::Open {
             branch_name,

@@ -374,13 +374,30 @@ fn get_default_shell() -> Result<String> {
     }
 }
 
-/// Check if a shell is POSIX-compatible (supports `$(...)` syntax)
-fn is_posix_shell(shell: &str) -> bool {
+/// Detected shell type for behavior customization
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ShellType {
+    Posix,
+    Nushell,
+    Other,
+}
+
+/// Detect the type of shell from its path
+fn detect_shell_type(shell: &str) -> ShellType {
     let shell_name = Path::new(shell)
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("sh");
-    matches!(shell_name, "bash" | "zsh" | "sh" | "dash" | "ksh" | "ash")
+    match shell_name {
+        "bash" | "zsh" | "sh" | "dash" | "ksh" | "ash" => ShellType::Posix,
+        "nu" => ShellType::Nushell,
+        _ => ShellType::Other,
+    }
+}
+
+/// Check if a shell is POSIX-compatible (supports `$(...)` syntax)
+fn is_posix_shell(shell: &str) -> bool {
+    matches!(detect_shell_type(shell), ShellType::Posix)
 }
 
 /// Timeout for waiting for pane readiness (seconds)
@@ -426,27 +443,43 @@ impl PaneHandshake {
 
     /// Build a shell wrapper command that signals readiness.
     ///
-    /// The wrapper briefly disables echo while signaling the channel, restores it,
-    /// then exec's into the shell so the TTY starts in a normal state.
+    /// For non-POSIX shells (nushell, fish), the shell itself signals readiness after
+    /// initialization. This ensures commands are sent only after the shell prompt is ready.
     ///
-    /// We wrap in `sh -c "..."` with double quotes to ensure the command works when
-    /// tmux's default-shell is a non-POSIX shell like nushell. Single-quote escaping
-    /// (`'\''`) doesn't work reliably when nushell parses the command before passing
-    /// it to sh.
+    /// - Nushell: uses `-e` flag to execute command then enter interactive mode
+    /// - Fish: uses `-C` flag to run command before showing prompt
+    /// - POSIX: signals before exec (shell starts fast enough)
     fn wrapper_command(&self, shell: &str) -> String {
-        // Two-step escaping for the shell path:
-        // 1. Escape for inner single-quoted context (exec '...')
-        let inner_shell = shell.replace('\'', "'\\''");
-        // 2. Escape for outer double-quoted context (sh -c "...")
-        let escaped_shell = inner_shell
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('$', "\\$")
-            .replace('`', "\\`");
-        format!(
-            "sh -c \"stty -echo 2>/dev/null; tmux wait-for -U {}; stty echo 2>/dev/null; exec '{}' -l\"",
-            self.channel, escaped_shell
-        )
+        match detect_shell_type(shell) {
+            ShellType::Nushell => {
+                // Nushell: inject unlock into PROMPT_INDICATOR so it runs after prompt is rendered.
+                // This ensures readline is ready to receive input when we send keys.
+                // The unlock is wrapped to handle both string and closure PROMPT_INDICATOR types.
+                let nu_code = format!(
+                    r#"let orig = $env.PROMPT_INDICATOR; $env.PROMPT_INDICATOR = {{|| do -i {{ ^tmux wait-for -U {} o+e>| ignore }}; if ($orig | describe) == "closure" {{ do $orig }} else {{ $orig }} }}"#,
+                    self.channel
+                );
+                format!(
+                    "sh -c \"WORKMUX_CHANNEL={} exec '{}' -l -e '{}'\"",
+                    self.channel,
+                    shell.replace('\'', "'\\''"),
+                    nu_code.replace('\'', "'\\''")
+                )
+            }
+            _ => {
+                // POSIX shells: signal before exec (fast enough startup)
+                let inner_shell = shell.replace('\'', "'\\''");
+                let escaped_shell = inner_shell
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"")
+                    .replace('$', "\\$")
+                    .replace('`', "\\`");
+                format!(
+                    "sh -c \"stty -echo 2>/dev/null; tmux wait-for -U {}; stty echo 2>/dev/null; exec '{}' -l\"",
+                    self.channel, escaped_shell
+                )
+            }
+        }
     }
 
     /// Wait for the shell to signal it is ready, then clean up.
